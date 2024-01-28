@@ -1,2 +1,2 @@
-# DiS
-Scalable Diffusion Models with State Space Backbone
+## Scalable Diffusion Models with State Space Backbone （DiS）
+
