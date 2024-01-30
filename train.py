@@ -2,6 +2,7 @@ import torch
 import argparse
 import os 
 import torchvision
+import math 
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -66,6 +67,20 @@ def center_crop_arr(pil_image, image_size):
     return Image.fromarray(arr[crop_y: crop_y + image_size, crop_x: crop_x + image_size])
 
 
+def adjust_learning_rate(optimizer, epoch, args):
+    """Decay the learning rate with half-cycle cosine after warmup"""
+    if epoch < args.warmup_epochs:
+        lr = args.lr * epoch / args.warmup_epochs 
+    else:
+        lr = args.min_lr + (args.lr - args.min_lr) * 0.5 * \
+            (1. + math.cos(math.pi * (epoch - args.warmup_epochs) / (args.epochs - args.warmup_epochs)))
+    for param_group in optimizer.param_groups:
+        if "lr_scale" in param_group:
+            param_group["lr"] = lr * param_group["lr_scale"]
+        else:
+            param_group["lr"] = lr
+    return lr
+
 
 def main(args): 
     # Setup DDP
@@ -89,6 +104,7 @@ def main(args):
     
     model = DiS_models[args.model](
         img_size=args.image_size,
+        num_classes=args.num_classes,
     ) 
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
     requires_grad(ema, False)
@@ -96,7 +112,7 @@ def main(args):
     model = DDP(model.to(device), device_ids=[rank]) 
     diffusion = create_diffusion(timestep_respacing="")  # default: 1000 steps, linear noise schedule 
 
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0)
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0)
 
     # Setup data
     transform = transforms.Compose([
@@ -142,12 +158,19 @@ def main(args):
         sampler.set_epoch(epoch) 
         with tqdm(enumerate(loader), total=len(loader)) as tq:
             for data_iter_step, samples in tq: 
+                # we use a per iteration (instead of per epoch) lr scheduler
+                if data_iter_step % args.accum_iter == 0:
+                    adjust_learning_rate(opt, data_iter_step / len(loader) + epoch, args)
+                
                 x = samples[0].to(device) 
                 t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device) 
 
                 loss_dict = diffusion.training_losses(model, x, t)
                 loss = loss_dict["loss"].mean()
-                opt.zero_grad()
+                
+                if (data_iter_step + 1) % args.accum_iter == 0:
+                    opt.zero_grad()
+                
                 loss.backward()
                 opt.step()
                 update_ema(ema, model.module)
@@ -179,15 +202,38 @@ def main(args):
                 """
                 
         # eval 
-        diffusion_eval = create_diffusion(str(250))
-        n = 16
-        z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
-        # Sample images:
-        eval_samples = diffusion_eval.p_sample_loop(
-            ema.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=None, progress=True, device=device
-        )
-        save_image(eval_samples, os.path.join(experiment_dir, "sample_" + str(epoch) + ".png"), nrow=4, normalize=True, value_range=(-1, 1))
+        dist.barrier()
+        if rank == 0:
+            diffusion_eval = create_diffusion(str(250)) 
 
+            if args.task_type == 'uncond': 
+                n = 16
+                z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
+                # Sample images:
+                eval_samples = diffusion_eval.p_sample_loop(
+                    ema.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=None, progress=True, device=device
+                )
+            elif args.task_type == 'class-cond':
+                class_labels = [207, 360, 387, 974, 88, 979, 417, 279, 0, 23, 67, 398, 12, 34, 65, 18]
+                n = len(class_labels) 
+                z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
+                y = torch.tensor(class_labels, device=device)
+                # Setup classifier-free guidance:
+                z = torch.cat([z, z], 0)
+                y_null = torch.tensor([1000] * n, device=device)
+                y = torch.cat([y, y_null], 0)
+                model_kwargs = dict(labels=y,)
+                # Sample images:
+                samples = diffusion_eval.p_sample_loop(
+                    ema.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+                )
+                eval_samples, _ = samples.chunk(2, dim=0) 
+                
+            else:
+                pass 
+            save_image(eval_samples, os.path.join(experiment_dir, "sample_" + str(epoch) + ".png"), nrow=4, normalize=True, value_range=(-1, 1))
+        
+        dist.barrier()
 
 
 
@@ -195,13 +241,22 @@ def main(args):
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, required=True)
-    parser.add_argument("--results-dir", type=str, default="results")
+    parser.add_argument("--results-dir", type=str, default="/TrainData/Multimodal/zhengcong.fei/dis/results")
+    parser.add_argument("--task-type", type=str, choices=['uncond', 'class-cond', 'text-cond'], default='uncond')
+    parser.add_argument("--data-type", type=str, choices=['cifar-10', 'imagenet', 'mscoco'], default='cifar-10')
+    parser.add_argument("--num-classes", type=int, default=-1)
+    
     parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiT-XL/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512, 64, 32], default=32)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--epochs", type=int, default=1500)
-    parser.add_argument("--ckpt-every", type=int, default=50000)
-    parser.add_argument("--global-batch-size", type=int, default=128)
+    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--ckpt-every", type=int, default=5000)
+    parser.add_argument("--global-batch-size", type=int, default=64)
     parser.add_argument("--global-seed", type=int, default=0) 
+
+    parser.add_argument('--lr', type=float, default=3e-4,) 
+    parser.add_argument('--min_lr', type=float, default=1e-6,)
+    parser.add_argument('--warmup_epochs', type=int, default=5,)
+    parser.add_argument('--accum_iter', default=1, type=int,) 
     args = parser.parse_args()
     main(args)

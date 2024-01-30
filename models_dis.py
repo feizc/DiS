@@ -456,9 +456,11 @@ class DisModel(nn.Module):
         
         self.out_channels = channels * 2 if learn_sigma else channels
         # self.decoder_pred = nn.Linear(embed_dim, self.patch_dim, bias=True) 
-        self.final_layer = FinalLayer(embed_dim, patch_size, self.out_channels)
-        
 
+        if num_classes > 0:
+            self.final_layer = FinalLayer(embed_dim, patch_size, self.out_channels, condition=True)
+        else:
+            self.final_layer = FinalLayer(embed_dim, patch_size, self.out_channels)    
         # original init
         # self.apply(segm_init_weights) 
         # mamba init
@@ -482,6 +484,7 @@ class DisModel(nn.Module):
         time_token = time_token.unsqueeze(dim=1)
         
         x = torch.cat((time_token, x), dim=1)
+
         if labels is not None:
             label_emb = self.label_emb(labels)
             label_emb = label_emb.unsqueeze(dim=1)
@@ -525,7 +528,7 @@ class DisModel(nn.Module):
         x = hidden_states
         # x = self.norm_f(hidden_states)
         # x = self.decoder_pred(x)
-        x = self.final_layer(x)
+        x = self.final_layer(x, c=labels)
         assert x.size(1) == self.extras + L
         x = x[:, self.extras:, :]
         x = unpatchify(x, self.out_channels)
@@ -534,6 +537,7 @@ class DisModel(nn.Module):
 
 
     def forward_with_cfg(self, x, timesteps, cfg_scale=2, labels=None):
+
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
         model_out = self.forward(combined, timesteps, labels)
@@ -559,6 +563,28 @@ def dis_s_2(**kwargs):
     return model 
 
 
+def dis_s_4(**kwargs): 
+    model = DisModel(
+        patch_size=4,
+        embed_dim=768,
+        depth=24,
+        **kwargs
+    )
+    return model 
+
+
+def dis_l_2(**kwargs): 
+    model = DisModel(
+        patch_size=2,
+        embed_dim=1536,
+        depth=48,
+        **kwargs
+    )
+    return model 
+
+
+
 DiS_models = {
-    "DiS-S/2": dis_s_2,
+    "DiS-S/2": dis_s_2, "DiS-S/4": dis_s_4,
+    "DiS-L/2": dis_l_2,
 }
