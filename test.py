@@ -32,5 +32,17 @@ def test_cifar10():
     print(cifar10)
     print(cifar10_test[0])
 
-test_dismodel() 
+
+
+def test_imagenet1k(): 
+    data_path = '/TrainData/Multimodal/public/datasets/ImageNet/train' 
+    import torchvision.datasets as datasets
+    dataset_train = datasets.ImageFolder(data_path) 
+    print(dataset_train[0])
+
+
+
+#test_dismodel() 
 #test_cifar10()
+test_imagenet1k()
+

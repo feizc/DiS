@@ -3,7 +3,7 @@ import argparse
 import os 
 import torchvision
 import math 
-
+import random
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
@@ -121,12 +121,23 @@ def main(args):
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
-    dataset = torchvision.datasets.CIFAR10(
-        root=args.data_path,
-        train=True,
-        download=False,
-        transform=transform,
-    )
+
+    if argparse.dataset_type == "cifar-10": 
+        dataset = torchvision.datasets.CIFAR10(
+            root=args.data_path,
+            train=True,
+            download=False,
+            transform=transform,
+        )
+    elif argparse.dataset_type == "imagenet": 
+        dataset = torchvision.datasets.ImageFolder(
+            os.path.join(args.data_path, 'train'),
+            transform=transform_train,
+        )
+    else:
+        dataset = None
+
+
     sampler = DistributedSampler(
         dataset,
         num_replicas=dist.get_world_size(),
@@ -164,8 +175,14 @@ def main(args):
                 
                 x = samples[0].to(device) 
                 t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device) 
-
-                loss_dict = diffusion.training_losses(model, x, t)
+                
+                if args.num_classes > 0: 
+                    labels = samples[1].to(device) 
+                else:
+                    labels = None 
+                
+                model_kwargs = dict(labels=labels) 
+                loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
                 loss = loss_dict["loss"].mean()
                 
                 if (data_iter_step + 1) % args.accum_iter == 0:
@@ -193,7 +210,7 @@ def main(args):
                         checkpoint_path = f"{checkpoint_dir}/{train_steps:07d}.pt"
                         torch.save(checkpoint, checkpoint_path) 
                     dist.barrier()
-                
+                # break 
                 """
                 # debug for ignored parameters 
                 for name, param in model.named_parameters():
@@ -214,13 +231,17 @@ def main(args):
                     ema.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=None, progress=True, device=device
                 )
             elif args.task_type == 'class-cond':
-                class_labels = [207, 360, 387, 974, 88, 979, 417, 279, 0, 23, 67, 398, 12, 34, 65, 18]
-                n = len(class_labels) 
+                n = 16
+                class_labels=[]
+                for i in range(n):
+                    class_labels.append(random.randint(0, args.num_classes - 1))
+                
                 z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
                 y = torch.tensor(class_labels, device=device)
                 # Setup classifier-free guidance:
                 z = torch.cat([z, z], 0)
-                y_null = torch.tensor([1000] * n, device=device)
+                y_null = torch.tensor([args.num_classes] * n, device=device)
+                
                 y = torch.cat([y, y_null], 0)
                 model_kwargs = dict(labels=y,)
                 # Sample images:
@@ -243,15 +264,15 @@ if __name__ == "__main__":
     parser.add_argument("--data-path", type=str, required=True)
     parser.add_argument("--results-dir", type=str, default="/TrainData/Multimodal/zhengcong.fei/dis/results")
     parser.add_argument("--task-type", type=str, choices=['uncond', 'class-cond', 'text-cond'], default='uncond')
-    parser.add_argument("--data-type", type=str, choices=['cifar-10', 'imagenet', 'mscoco'], default='cifar-10')
+    parser.add_argument("--dataset-type", type=str, choices=['cifar-10', 'imagenet', 'mscoco'], default='cifar-10')
     parser.add_argument("--num-classes", type=int, default=-1)
     
-    parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiT-XL/2")
+    parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiS-L/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512, 64, 32], default=32)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--ckpt-every", type=int, default=5000)
-    parser.add_argument("--global-batch-size", type=int, default=64)
+    parser.add_argument("--global-batch-size", type=int, default=128)
     parser.add_argument("--global-seed", type=int, default=0) 
 
     parser.add_argument('--lr', type=float, default=3e-4,) 

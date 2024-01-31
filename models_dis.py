@@ -139,6 +139,10 @@ class DropPath(nn.Module):
         return f'drop_prob={round(self.drop_prob,3):0.3f}'
 
 
+def modulate(x, shift, scale):
+    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
@@ -330,7 +334,8 @@ class FinalLayer(nn.Module):
 
     def forward(self, x, c=None): 
         if c is not None: 
-            shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
+            c = self.adaLN_modulation(c).squeeze(1)
+            shift, scale = c.chunk(2, dim=1)
             x = modulate(self.norm_final(x), shift, scale)
             x = self.linear(x)
         else:
@@ -338,6 +343,36 @@ class FinalLayer(nn.Module):
             x = self.linear(x)
         return x
 
+
+
+class LabelEmbedder(nn.Module):
+    """
+    Embeds class labels into vector representations. Also handles label dropout for classifier-free guidance.
+    """
+    def __init__(self, num_classes, hidden_size, dropout_prob):
+        super().__init__()
+        use_cfg_embedding = dropout_prob > 0
+        self.embedding_table = nn.Embedding(num_classes + use_cfg_embedding, hidden_size)
+        self.num_classes = num_classes
+        self.dropout_prob = dropout_prob
+
+    def token_drop(self, labels, force_drop_ids=None):
+        """
+        Drops labels to enable classifier-free guidance.
+        """
+        if force_drop_ids is None:
+            drop_ids = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
+        else:
+            drop_ids = force_drop_ids == 1
+        labels = torch.where(drop_ids, self.num_classes, labels)
+        return labels
+
+    def forward(self, labels, train, force_drop_ids=None):
+        use_dropout = self.dropout_prob > 0
+        if (train and use_dropout) or (force_drop_ids is not None):
+            labels = self.token_drop(labels, force_drop_ids)
+        embeddings = self.embedding_table(labels)
+        return embeddings
 
 
 class DisModel(nn.Module): 
@@ -362,8 +397,9 @@ class DisModel(nn.Module):
         bimamba_type="v2",
         learn_sigma=True,
         if_cls_token=False,
-        mlp_time_embed=False,
+        mlp_time_embed=True,
         conv=True, skip=True,
+        class_dropout_prob=0.1,
         **kwargs
     ): 
         super().__init__()
@@ -387,7 +423,8 @@ class DisModel(nn.Module):
         ) if mlp_time_embed else nn.Identity()
         
         if self.num_classes > 0:
-            self.label_emb = nn.Embedding(self.num_classes, embed_dim)
+            # self.label_emb = nn.Embedding(self.num_classes, embed_dim)
+            self.label_emb = LabelEmbedder(num_classes, embed_dim, class_dropout_prob)
             self.extras = 2
         else:
             self.extras = 1
@@ -486,7 +523,7 @@ class DisModel(nn.Module):
         x = torch.cat((time_token, x), dim=1)
 
         if labels is not None:
-            label_emb = self.label_emb(labels)
+            label_emb = self.label_emb(labels, self.training)
             label_emb = label_emb.unsqueeze(dim=1)
             x = torch.cat((label_emb, x), dim=1) 
 
@@ -528,7 +565,11 @@ class DisModel(nn.Module):
         x = hidden_states
         # x = self.norm_f(hidden_states)
         # x = self.decoder_pred(x)
-        x = self.final_layer(x, c=labels)
+        if labels is not None:
+            x = self.final_layer(x, c=time_token+label_emb)
+        else:
+            x = self.final_layer(x)
+
         assert x.size(1) == self.extras + L
         x = x[:, self.extras:, :]
         x = unpatchify(x, self.out_channels)
@@ -536,7 +577,7 @@ class DisModel(nn.Module):
         return x
 
 
-    def forward_with_cfg(self, x, timesteps, cfg_scale=2, labels=None):
+    def forward_with_cfg(self, x, timesteps, cfg_scale=1.5, labels=None):
 
         half = x[: len(x) // 2]
         combined = torch.cat([half, half], dim=0)
