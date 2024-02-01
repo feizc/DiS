@@ -617,7 +617,7 @@ def dis_s_4(**kwargs):
 def dis_l_2(**kwargs): 
     model = DisModel(
         patch_size=2,
-        embed_dim=1536,
+        embed_dim=1024,
         depth=48,
         **kwargs
     )

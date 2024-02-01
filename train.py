@@ -106,6 +106,12 @@ def main(args):
         img_size=args.image_size,
         num_classes=args.num_classes,
     ) 
+
+    if args.resume is not None:
+        print('resume model')
+        checkponit = torch.load(args.resume, map_location=lambda storage, loc: storage)['ema'] 
+        model.load_state_dict(checkponit) 
+
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
     requires_grad(ema, False)
 
@@ -122,17 +128,17 @@ def main(args):
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
 
-    if argparse.dataset_type == "cifar-10": 
+    if args.dataset_type == "cifar-10": 
         dataset = torchvision.datasets.CIFAR10(
             root=args.data_path,
             train=True,
             download=False,
             transform=transform,
         )
-    elif argparse.dataset_type == "imagenet": 
+    elif args.dataset_type == "imagenet": 
         dataset = torchvision.datasets.ImageFolder(
             os.path.join(args.data_path, 'train'),
-            transform=transform_train,
+            transform=transform,
         )
     else:
         dataset = None
@@ -266,6 +272,7 @@ if __name__ == "__main__":
     parser.add_argument("--task-type", type=str, choices=['uncond', 'class-cond', 'text-cond'], default='uncond')
     parser.add_argument("--dataset-type", type=str, choices=['cifar-10', 'imagenet', 'mscoco'], default='cifar-10')
     parser.add_argument("--num-classes", type=int, default=-1)
+    parser.add_argument("--resume", type=str, default=None)
     
     parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiS-L/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512, 64, 32], default=32)
