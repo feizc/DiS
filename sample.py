@@ -28,7 +28,7 @@ def main(args):
     model.eval() 
     diffusion = create_diffusion(str(args.num_sampling_steps)) 
 
-    n = 16
+    n = 1
     class_labels=[]
     for i in range(n):
         class_labels.append(random.randint(0, args.num_classes - 1))
@@ -52,13 +52,13 @@ def main(args):
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser() 
-    parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiS-S/2")
-    parser.add_argument("--image-size", type=int, choices=[32, 64, 256, 512], default=32)
-    parser.add_argument("--num-classes", type=int, default=10)
+    parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiS-L/2")
+    parser.add_argument("--image-size", type=int, choices=[32, 64, 256, 512], default=64)
+    parser.add_argument("--num-classes", type=int, default=1000)
     parser.add_argument("--cfg-scale", type=float, default=1.5) 
     parser.add_argument("--num-sampling-steps", type=int, default=250) 
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--ckpt", type=str, default="/TrainData/Multimodal/zhengcong.fei/dis/results/002-DiS-S-2/checkpoints/0140000.pt",) 
+    parser.add_argument("--ckpt", type=str, default="/TrainData/Multimodal/zhengcong.fei/dis/results/007-DiS-L-2-64/checkpoints/0030000.pt",) 
     args = parser.parse_args()
 
     main(args)

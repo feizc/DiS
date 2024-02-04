@@ -49,7 +49,7 @@ def test_fid_score():
     path2 = '/TrainData/Multimodal/zhengcong.fei/dis/results/uncond_cifar10_small/his'
     fid = calculate_fid_given_paths((path1, path2))
 
-#test_dismodel() 
-#test_cifar10()
+# test_dismodel() 
+# test_cifar10()
 # test_imagenet1k()
 test_fid_score()

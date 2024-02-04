@@ -624,8 +624,28 @@ def dis_l_2(**kwargs):
     return model 
 
 
+def dis_l_4(**kwargs): 
+    model = DisModel(
+        patch_size=4,
+        embed_dim=1024,
+        depth=48,
+        **kwargs
+    )
+    return model 
+
+
+def dis_m_2(**kwargs): 
+    model = DisModel(
+        patch_size=2,
+        embed_dim=768,
+        depth=48,
+        **kwargs
+    )
+    return model 
+
 
 DiS_models = {
     "DiS-S/2": dis_s_2, "DiS-S/4": dis_s_4,
-    "DiS-L/2": dis_l_2,
+    "DiS-M/2": dis_m_2, 
+    "DiS-L/2": dis_l_2, "DiS-L/4": dis_l_4,
 }

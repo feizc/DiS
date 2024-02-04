@@ -98,7 +98,7 @@ def main(args):
         os.makedirs(args.results_dir, exist_ok=True) 
         experiment_index = len(glob(f"{args.results_dir}/*"))
         model_string_name = args.model.replace("/", "-")  # e.g., DiT-XL/2 --> DiT-XL-2 (for naming folders)
-        experiment_dir = f"{args.results_dir}/{experiment_index:03d}-{model_string_name}"  # Create an experiment folder
+        experiment_dir = f"{args.results_dir}/{model_string_name}-{args.dataset_type}-{args.task_type}"  # Create an experiment folder
         checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
         os.makedirs(checkpoint_dir, exist_ok=True)
     
@@ -127,6 +127,15 @@ def main(args):
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
     ])
+    """
+    # for model image size << data image size
+    transform = transforms.Compose([
+        transforms.Resize([args.image_size, args.image_size]),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
+    ])
+    """
 
     if args.dataset_type == "cifar-10": 
         dataset = torchvision.datasets.CIFAR10(
@@ -190,6 +199,10 @@ def main(args):
                 model_kwargs = dict(labels=labels) 
                 loss_dict = diffusion.training_losses(model, x, t, model_kwargs)
                 loss = loss_dict["loss"].mean()
+                loss_value = loss.item() 
+
+                if not math.isfinite(loss_value): 
+                    continue
                 
                 if (data_iter_step + 1) % args.accum_iter == 0:
                     opt.zero_grad()
@@ -198,7 +211,7 @@ def main(args):
                 opt.step()
                 update_ema(ema, model.module)
 
-                running_loss += loss.item()
+                running_loss += loss_value
                 log_steps += 1
                 train_steps += 1
 
@@ -224,43 +237,44 @@ def main(args):
                         print(name)
                 """
                 
-        # eval 
-        dist.barrier()
-        if rank == 0:
-            diffusion_eval = create_diffusion(str(250)) 
+                # eval 
+                if train_steps % args.eval_steps == 0: 
+                    dist.barrier()
+                    if rank == 0:
+                        diffusion_eval = create_diffusion(str(250)) 
 
-            if args.task_type == 'uncond': 
-                n = 16
-                z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
-                # Sample images:
-                eval_samples = diffusion_eval.p_sample_loop(
-                    ema.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=None, progress=True, device=device
-                )
-            elif args.task_type == 'class-cond':
-                n = 16
-                class_labels=[]
-                for i in range(n):
-                    class_labels.append(random.randint(0, args.num_classes - 1))
-                
-                z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
-                y = torch.tensor(class_labels, device=device)
-                # Setup classifier-free guidance:
-                z = torch.cat([z, z], 0)
-                y_null = torch.tensor([args.num_classes] * n, device=device)
-                
-                y = torch.cat([y, y_null], 0)
-                model_kwargs = dict(labels=y,)
-                # Sample images:
-                samples = diffusion_eval.p_sample_loop(
-                    ema.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
-                )
-                eval_samples, _ = samples.chunk(2, dim=0) 
-                
-            else:
-                pass 
-            save_image(eval_samples, os.path.join(experiment_dir, "sample_" + str(epoch) + ".png"), nrow=4, normalize=True, value_range=(-1, 1))
-        
-        dist.barrier()
+                        if args.task_type == 'uncond': 
+                            n = 16
+                            z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
+                            # Sample images:
+                            eval_samples = diffusion_eval.p_sample_loop(
+                                ema.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=None, progress=True, device=device
+                            )
+                        elif args.task_type == 'class-cond':
+                            n = 16
+                            class_labels=[]
+                            for i in range(n):
+                                class_labels.append(random.randint(0, args.num_classes - 1))
+                            
+                            z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
+                            y = torch.tensor(class_labels, device=device)
+                            # Setup classifier-free guidance:
+                            z = torch.cat([z, z], 0)
+                            y_null = torch.tensor([args.num_classes] * n, device=device)
+                            
+                            y = torch.cat([y, y_null], 0)
+                            model_kwargs = dict(labels=y,)
+                            # Sample images:
+                            samples = diffusion_eval.p_sample_loop(
+                                ema.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
+                            )
+                            eval_samples, _ = samples.chunk(2, dim=0) 
+                            
+                        else:
+                            pass 
+                        save_image(eval_samples, os.path.join(experiment_dir, "sample_" + str(epoch) + ".png"), nrow=4, normalize=True, value_range=(-1, 1))
+                        
+                    dist.barrier()
 
 
 
@@ -276,15 +290,16 @@ if __name__ == "__main__":
     
     parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiS-L/2")
     parser.add_argument("--image-size", type=int, choices=[256, 512, 64, 32], default=32)
-    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--ckpt-every", type=int, default=5000)
     parser.add_argument("--global-batch-size", type=int, default=128)
-    parser.add_argument("--global-seed", type=int, default=0) 
+    parser.add_argument("--global-seed", type=int, default=2023) 
 
-    parser.add_argument('--lr', type=float, default=3e-4,) 
+    parser.add_argument('--lr', type=float, default=1e-4,) 
     parser.add_argument('--min_lr', type=float, default=1e-6,)
     parser.add_argument('--warmup_epochs', type=int, default=5,)
     parser.add_argument('--accum_iter', default=1, type=int,) 
+    parser.add_argument('--eval_steps', default=1000, type=int,) 
     args = parser.parse_args()
     main(args)
