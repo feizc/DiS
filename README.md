@@ -36,6 +36,7 @@ torchrun --nnodes=1 --nproc_per_node=N train.py \
 --task-type class-cond \
 --num-classes 1000 
 ```
+
 There are several additional options; see [`train.py`](train.py) for details. 
 All experiments in our work of training script can be found in file direction `script`. 
 
@@ -54,6 +55,15 @@ For convenience, the pre-trained DiS models can be downloaded directly here as w
 
 We include a [`sample.py`](sample.py) script which samples images from a DiS model. Besides, we support other metrics evaluation in [`test.py`](test.py) script. 
 
+```bash
+python sample.py \
+--model DiS-L/2 \
+--dataset-type imagenet \
+--ckpt /path/to/model \
+--image-size 256 \
+--num-classes 1000 \
+--cfg-scale 1.5
+```
 
 
 ### Acknowledgments
