@@ -15,7 +15,7 @@ This repo contains PyTorch model definitions, pre-trained weights and training/s
   - `conda create -n your_env_name python=3.10`
 
 - Install ``causal_conv1d`` and ``mamba``
-  - `pip install -e causal-conv1d`
+  - `pip install -e causal_conv1d`
   - `pip install -e mamba`
 
 
