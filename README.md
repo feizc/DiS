@@ -37,7 +37,7 @@ torchrun --nnodes=1 --nproc_per_node=N train.py \
 --num-classes 1000 
 ```
 There are several additional options; see [`train.py`](train.py) for details. 
-All experiments in our work of training script can be found in `script`. 
+All experiments in our work of training script can be found in file direction `script`. 
 
 
 For convenience, the pre-trained DiS models can be downloaded directly here as well:
