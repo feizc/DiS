@@ -597,7 +597,7 @@ class DisModel(nn.Module):
 def dis_s_2(**kwargs): 
     model = DisModel(
         patch_size=2,
-        embed_dim=768,
+        embed_dim=368,
         depth=24,
         **kwargs
     )
@@ -605,6 +605,26 @@ def dis_s_2(**kwargs):
 
 
 def dis_s_4(**kwargs): 
+    model = DisModel(
+        patch_size=4,
+        embed_dim=368,
+        depth=24,
+        **kwargs
+    )
+    return model 
+
+
+def dis_b_2(**kwargs): 
+    model = DisModel(
+        patch_size=2,
+        embed_dim=768,
+        depth=24,
+        **kwargs
+    )
+    return model 
+
+
+def dis_b_4(**kwargs): 
     model = DisModel(
         patch_size=4,
         embed_dim=768,
@@ -643,9 +663,40 @@ def dis_m_2(**kwargs):
     )
     return model 
 
+def dis_m_4(**kwargs): 
+    model = DisModel(
+        patch_size=4,
+        embed_dim=768,
+        depth=48,
+        **kwargs
+    )
+    return model 
+
+
+def dis_h_2(**kwargs): 
+    model = DisModel(
+        patch_size=2,
+        embed_dim=1536,
+        depth=48,
+        **kwargs
+    )
+    return model 
+
+def dis_h_4(**kwargs): 
+    model = DisModel(
+        patch_size=4,
+        embed_dim=1536,
+        depth=48,
+        **kwargs
+    )
+    return model 
+
+
 
 DiS_models = {
     "DiS-S/2": dis_s_2, "DiS-S/4": dis_s_4,
-    "DiS-M/2": dis_m_2, 
+    "DiS-B/2": dis_b_2, "DiS-B/4": dis_b_4,
+    "DiS-M/2": dis_m_2, "DiS-M/4": dis_m_4, 
     "DiS-L/2": dis_l_2, "DiS-L/4": dis_l_4,
+    "DiS-H/2": dis_h_2, "DiS-H/4": dis_h_4, 
 }

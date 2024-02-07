@@ -19,10 +19,11 @@ from copy import deepcopy
 from PIL import Image
 from tqdm import tqdm 
 from torchvision.utils import save_image
+from diffusers.models import AutoencoderKL 
 
 from models_dis import DiS_models 
 from diffusion import create_diffusion
-
+from tools.dataset import CelebADataset 
 
 @torch.no_grad()
 def update_ema(ema_model, model, decay=0.9999):
@@ -102,10 +103,18 @@ def main(args):
         checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
         os.makedirs(checkpoint_dir, exist_ok=True)
     
-    model = DiS_models[args.model](
-        img_size=args.image_size,
-        num_classes=args.num_classes,
-    ) 
+    if args.latent_space == True: 
+        model = DiS_models[args.model](
+            img_size=args.image_size // 8,
+            num_classes=args.num_classes,
+            channels=4,
+        ) 
+    else:
+        model = DiS_models[args.model](
+            img_size=args.image_size,
+            num_classes=args.num_classes,
+            channels=3,
+        ) 
 
     if args.resume is not None:
         print('resume model')
@@ -118,24 +127,30 @@ def main(args):
     model = DDP(model.to(device), device_ids=[rank]) 
     diffusion = create_diffusion(timestep_respacing="")  # default: 1000 steps, linear noise schedule 
 
+    if args.latent_space == True: 
+        vae = AutoencoderKL.from_pretrained(args.vae_path).to(device)
+
+
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0)
 
     # Setup data
-    transform = transforms.Compose([
-        transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
-    ])
-    """
-    # for model image size << data image size
-    transform = transforms.Compose([
-        transforms.Resize([args.image_size, args.image_size]),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
-    ])
-    """
+    if args.resize_only == False: 
+        transform = transforms.Compose([
+            transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
+        ])
+    else: 
+        # for model image size << data image size
+        transform = transforms.Compose([
+            transforms.Resize(args.image_size),
+            transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
+        ])
+    
 
     if args.dataset_type == "cifar-10": 
         dataset = torchvision.datasets.CIFAR10(
@@ -150,7 +165,10 @@ def main(args):
             transform=transform,
         )
     else:
-        dataset = None
+        dataset = CelebADataset(
+            data_path=args.data_path,
+            transform=transform,
+        )
 
 
     sampler = DistributedSampler(
@@ -189,6 +207,11 @@ def main(args):
                     adjust_learning_rate(opt, data_iter_step / len(loader) + epoch, args)
                 
                 x = samples[0].to(device) 
+
+                if args.latent_space == True: 
+                    # Map input images to latent space + normalize latents:
+                    x = vae.encode(x).latent_dist.sample().mul_(0.18215)
+
                 t = torch.randint(0, diffusion.num_timesteps, (x.shape[0],), device=device) 
                 
                 if args.num_classes > 0: 
@@ -241,7 +264,7 @@ def main(args):
                 if train_steps % args.eval_steps == 0: 
                     dist.barrier()
                     if rank == 0:
-                        diffusion_eval = create_diffusion(str(250)) 
+                        diffusion_eval = create_diffusion(str(10)) 
 
                         if args.task_type == 'uncond': 
                             n = 16
@@ -255,8 +278,10 @@ def main(args):
                             class_labels=[]
                             for i in range(n):
                                 class_labels.append(random.randint(0, args.num_classes - 1))
-                            
-                            z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
+                            if args.latent_space == True: 
+                                z = torch.randn(n, 4, args.image_size//8, args.image_size//8, device=device)
+                            else:
+                                z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
                             y = torch.tensor(class_labels, device=device)
                             # Setup classifier-free guidance:
                             z = torch.cat([z, z], 0)
@@ -270,12 +295,14 @@ def main(args):
                             )
                             eval_samples, _ = samples.chunk(2, dim=0) 
                             
+                            if args.latent_space == True: 
+                                eval_samples = vae.decode(eval_samples / 0.18215).sample
+
                         else:
                             pass 
-                        save_image(eval_samples, os.path.join(experiment_dir, "sample_" + str(epoch) + ".png"), nrow=4, normalize=True, value_range=(-1, 1))
+                        save_image(eval_samples, os.path.join(experiment_dir, "sample_" + str(train_steps // args.eval_steps) + ".png"), nrow=4, normalize=True, value_range=(-1, 1))
                         
                     dist.barrier()
-
 
 
 
@@ -284,7 +311,8 @@ if __name__ == "__main__":
     parser.add_argument("--data-path", type=str, required=True)
     parser.add_argument("--results-dir", type=str, default="/TrainData/Multimodal/zhengcong.fei/dis/results")
     parser.add_argument("--task-type", type=str, choices=['uncond', 'class-cond', 'text-cond'], default='uncond')
-    parser.add_argument("--dataset-type", type=str, choices=['cifar-10', 'imagenet', 'mscoco'], default='cifar-10')
+    parser.add_argument("--dataset-type", type=str, choices=['cifar-10', 'imagenet', 'celeba'], default='cifar-10')
+    parser.add_argument("--resize-only", type=bool, default=False)
     parser.add_argument("--num-classes", type=int, default=-1)
     parser.add_argument("--resume", type=str, default=None)
     
@@ -294,12 +322,15 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=1000)
     parser.add_argument("--ckpt-every", type=int, default=5000)
     parser.add_argument("--global-batch-size", type=int, default=128)
-    parser.add_argument("--global-seed", type=int, default=2023) 
+    parser.add_argument("--global-seed", type=int, default=420) 
 
     parser.add_argument('--lr', type=float, default=1e-4,) 
     parser.add_argument('--min_lr', type=float, default=1e-6,)
     parser.add_argument('--warmup_epochs', type=int, default=5,)
     parser.add_argument('--accum_iter', default=1, type=int,) 
     parser.add_argument('--eval_steps', default=1000, type=int,) 
+
+    parser.add_argument('--latent_space', type=bool, default=False,) 
+    parser.add_argument('--vae_path', type=str, default='/TrainData/Multimodal/zhengcong.fei/dis/vae') 
     args = parser.parse_args()
     main(args)
