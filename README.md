@@ -47,8 +47,8 @@ For convenience, the pre-trained DiS models can be downloaded directly here as w
 |---------------|------------------|---------|
 | [DiS-S/2] | 32x32          | -    | 
 | [DiS-S/2] | 64x64          | -    | 
-| [DiS-L/2] | 256x256          | -    | 
-| [DiS-L/2] | 512x512          | -    | 
+| [DiS-H/2] | 256x256          | -    | 
+| [DiS-H/2] | 512x512          | -    | 
 
 
 ### Evaluation
