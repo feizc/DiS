@@ -46,10 +46,8 @@ For convenience, the pre-trained DiS models can be downloaded directly here as w
 
 | DiT Model     | Image Resolution | FID-50K | 
 |---------------|------------------|---------|
-| [DiS-S/2] | 32x32          | -    | 
-| [DiS-S/2] | 64x64          | -    | 
-| [DiS-H/2] | 256x256          | -    | 
-| [DiS-H/2] | 512x512          | -    | 
+| [DiS-H/2] | 256x256          | 2.10   | 
+| [DiS-H/2] | 512x512          | 2.88   | 
 
 
 ### Evaluation
