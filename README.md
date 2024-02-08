@@ -65,6 +65,17 @@ python sample.py \
 --cfg-scale 1.5
 ```
 
+### BibTeX
+
+```bibtex
+@article{Peebles2022DiT,
+  title={Scalable Diffusion Models with State Space Backbone},
+  author={Zhengcong Fei, Mingyuan Fan, Changqian Yu, Jusnshi Huang},
+  year={2024},
+  journal={arXiv preprint},
+}
+```
+
 
 ### Acknowledgments
 
