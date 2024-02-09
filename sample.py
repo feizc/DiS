@@ -28,19 +28,27 @@ def main(args):
     model.eval() 
     diffusion = create_diffusion(str(args.num_sampling_steps)) 
 
-    n = 1
-    class_labels=[]
-    for i in range(n):
-        class_labels.append(random.randint(0, args.num_classes - 1))
+    
+    n = 8
+    if args.num_classes > 0: 
+        class_labels=[]
+        for i in range(n):
+            class_labels.append(random.randint(0, args.num_classes - 1))
+            y = torch.tensor(class_labels, device=device)
+            y_null = torch.tensor([args.num_classes] * n, device=device)
+    
+            y = torch.cat([y, y_null], 0)
     
     z = torch.randn(n, 3, args.image_size, args.image_size, device=device)
-    y = torch.tensor(class_labels, device=device)
     # Setup classifier-free guidance:
     z = torch.cat([z, z], 0)
-    y_null = torch.tensor([args.num_classes] * n, device=device)
     
-    y = torch.cat([y, y_null], 0)
-    model_kwargs = dict(labels=y,)
+    if args.num_classes > 0: 
+        labels = y
+    else:
+        labels = None
+
+    model_kwargs = dict(labels=labels,)
     # Sample images:
     samples = diffusion.p_sample_loop(
         model.forward_with_cfg, z.shape, z, clip_denoised=False, model_kwargs=model_kwargs, progress=True, device=device
@@ -52,13 +60,13 @@ def main(args):
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser() 
-    parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiS-L/2")
+    parser.add_argument("--model", type=str, choices=list(DiS_models.keys()), default="DiS-M/2")
     parser.add_argument("--image-size", type=int, choices=[32, 64, 256, 512], default=64)
-    parser.add_argument("--num-classes", type=int, default=1000)
+    parser.add_argument("--num-classes", type=int, default=-1)
     parser.add_argument("--cfg-scale", type=float, default=1.5) 
     parser.add_argument("--num-sampling-steps", type=int, default=250) 
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--ckpt", type=str, default="/TrainData/Multimodal/zhengcong.fei/dis/results/007-DiS-L-2-64/checkpoints/0030000.pt",) 
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--ckpt", type=str, default="/TrainData/Multimodal/zhengcong.fei/dis/results/DiS-M-2-celeba-uncond/checkpoints/0075000.pt",) 
     args = parser.parse_args()
 
     main(args)
