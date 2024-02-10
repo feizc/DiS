@@ -41,7 +41,7 @@ torchrun --nnodes=1 --nproc_per_node=N train.py \
 --num-classes 1000 
 ```
 
-To launch DiS-S/2 (32x32) in the pixl space training with `N` GPUs on one node:
+To launch DiS-S/2 (32x32) in the pixel space training with `N` GPUs on one node:
 ```bash
 torchrun --nnodes=1 --nproc_per_node=N train.py \
 --model DiS-S/2 \
