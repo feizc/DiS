@@ -26,17 +26,33 @@ Our model treats all inputs including the time, condition and noisy image patche
 
 ### Training 
 
-We provide a training script for DiS in [`train.py`](train.py). This script can be used to train unconditional, class-conditional DiS models, it can be easily modified to support other types of conditioning. To launch DiS-L/2 (256x256) training with `N` GPUs on one node:
+We provide a training script for DiS in [`train.py`](train.py). This script can be used to train unconditional, class-conditional DiS models, it can be easily modified to support other types of conditioning. 
+
+To launch DiS-H/2 (512x512) in the latent space training with `N` GPUs on one node:
 
 ```bash
 torchrun --nnodes=1 --nproc_per_node=N train.py \
---model DiS-L/2 \
+--model DiS-H/2 \
 --dataset-type imagenet \
 --data-path /path/to/imagenet/train \
---image-size 256 \
+--image-size 512 \
+--latent_space True \
 --task-type class-cond \
 --num-classes 1000 
 ```
+
+To launch DiS-S/2 (32x32) in the pixl space training with `N` GPUs on one node:
+```bash
+torchrun --nnodes=1 --nproc_per_node=N train.py \
+--model DiS-S/2 \
+--dataset-type celeba \
+--data-path /path/to/imagenet/train \
+--image-size 32 \
+--latent_space False \
+--task-type uncond 
+```
+
+
 
 There are several additional options; see [`train.py`](train.py) for details. 
 All experiments in our work of training script can be found in file direction `script`. 
