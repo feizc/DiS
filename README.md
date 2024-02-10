@@ -38,6 +38,7 @@ torchrun --nnodes=1 --nproc_per_node=N train.py \
 --image-size 512 \
 --latent_space True \
 --task-type class-cond \
+--vae_path /path/to/vae \
 --num-classes 1000 
 ```
 
