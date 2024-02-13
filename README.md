@@ -1,5 +1,8 @@
 ## Scalable Diffusion Models with State Space Backbone （DiS）<br><sub>Official PyTorch Implementation</sub>
 
+[![arXiv](https://img.shields.io/badge/arXiv-2402.05608-b31b1b.svg)](https://arxiv.org/abs/2402.05608)
+
+
 This repo contains PyTorch model definitions, pre-trained weights and training/sampling code for our paper exploring diffusion models with state space backbones (DiSs).
 Our model treats all inputs including the time, condition and noisy image patches as tokens and employs skip connections between shallow and deep layers. Different from original Mamba for text sequence modeling, our SSM block process the hidden states sequence with both forward and backward directions
 
