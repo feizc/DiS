@@ -11,7 +11,7 @@ Our model treats all inputs including the time, condition and noisy image patche
 * 🛸 A DiS [training script](train.py) using PyTorch DDP
 
 
-### Environments
+### 1. Environments
 
 - Python 3.10
   - `conda create -n your_env_name python=3.10`
@@ -24,7 +24,7 @@ Our model treats all inputs including the time, condition and noisy image patche
   - `pip install -e mamba`
 
 
-### Training 
+### 2. Training 
 
 We provide a training script for DiS in [`train.py`](train.py). This script can be used to train unconditional, class-conditional DiS models, it can be easily modified to support other types of conditioning. 
 
@@ -63,11 +63,11 @@ For convenience, the pre-trained DiS models can be downloaded directly here as w
 
 | DiT Model     | Image Resolution | FID-50K | 
 |---------------|------------------|---------|
-| [DiS-H/2] | 256x256          | 2.10   | 
-| [DiS-H/2] | 512x512          | 2.88   | 
+| DiS-H/2 | 256x256          | 2.10   | 
+| DiS-H/2 | 512x512          | 2.88   | 
 
 
-### Evaluation
+### 3. Evaluation
 
 We include a [`sample.py`](sample.py) script which samples images from a DiS model. Besides, we support other metrics evaluation in [`test.py`](test.py) script. 
 
@@ -81,7 +81,7 @@ python sample.py \
 --cfg-scale 1.5
 ```
 
-### BibTeX
+### 4. BibTeX
 
 ```bibtex
 @article{FeiDiS2024,
@@ -93,7 +93,7 @@ python sample.py \
 ```
 
 
-### Acknowledgments
+### 5. Acknowledgments
 
 The codebase is based on the awesome [DiT](https://github.com/facebookresearch/DiT), [U-ViT](https://github.com/baofff/U-ViT), and [Vim](https://github.com/hustvl/Vim) repos. 
 
