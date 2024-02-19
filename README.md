@@ -72,7 +72,7 @@ For convenience, the pre-trained DiS models can be downloaded directly here as w
 
 ### 3. Evaluation
 
-We include a [`sample.py`](sample.py) script which samples images from a DiS model. Besides, we support other metrics evaluation in [`test.py`](test.py) script. 
+We include a [`sample.py`](sample.py) script which samples images from a DiS model. Besides, we support other metrics evaluation, e.g., FLOPS and model parameters, in [`test.py`](test.py) script. 
 
 ```bash
 python sample.py \
