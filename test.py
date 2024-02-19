@@ -82,4 +82,4 @@ def test_vae():
 # test_imagenet1k()
 # test_celeba()
 # test_fid_score()
-test_vae()
+# test_vae()
