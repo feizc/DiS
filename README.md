@@ -98,7 +98,7 @@ python sample.py \
 
 ### 5. Acknowledgments
 
-The codebase is based on the awesome [DiT](https://github.com/facebookresearch/DiT), [U-ViT](https://github.com/baofff/U-ViT), and [Vim](https://github.com/hustvl/Vim) repos. 
+The codebase is based on the awesome [DiT](https://github.com/facebookresearch/DiT), [mamba](https://github.com/state-spaces/mamba), [U-ViT](https://github.com/baofff/U-ViT), and [Vim](https://github.com/hustvl/Vim) repos. 
 
 
 
