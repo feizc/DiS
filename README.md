@@ -52,7 +52,6 @@ torchrun --nnodes=1 --nproc_per_node=N train.py \
 --dataset-type celeba \
 --data-path /path/to/imagenet/train \
 --image-size 32 \
---latent_space False \
 --task-type uncond 
 ```
 
