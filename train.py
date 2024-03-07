@@ -93,23 +93,26 @@ def main(args):
     torch.manual_seed(seed)
     torch.cuda.set_device(device)
     print(f"Starting rank={rank}, seed={seed}, world_size={dist.get_world_size()}.")
+    print(args)
 
     # Setup an experiment folder
     if rank == 0:
         os.makedirs(args.results_dir, exist_ok=True) 
         experiment_index = len(glob(f"{args.results_dir}/*"))
         model_string_name = args.model.replace("/", "-")  # e.g., DiT-XL/2 --> DiT-XL-2 (for naming folders)
-        experiment_dir = f"{args.results_dir}/{model_string_name}-{args.dataset_type}-{args.task_type}"  # Create an experiment folder
+        experiment_dir = f"{args.results_dir}/{model_string_name}-{args.dataset_type}-{args.task_type}-{args.image_size}"  # Create an experiment folder
         checkpoint_dir = f"{experiment_dir}/checkpoints"  # Stores saved model checkpoints
         os.makedirs(checkpoint_dir, exist_ok=True)
     
     if args.latent_space == True: 
+        print('train from latent space!')
         model = DiS_models[args.model](
             img_size=args.image_size // 8,
             num_classes=args.num_classes,
             channels=4,
         ) 
-    else:
+    else: 
+        print('train from raw space!')
         model = DiS_models[args.model](
             img_size=args.image_size,
             num_classes=args.num_classes,
@@ -119,6 +122,7 @@ def main(args):
     if args.resume is not None:
         print('resume model')
         checkponit = torch.load(args.resume, map_location=lambda storage, loc: storage)['ema'] 
+        
         model.load_state_dict(checkponit) 
 
     ema = deepcopy(model).to(device)  # Create an EMA of the model for use after training
@@ -132,6 +136,7 @@ def main(args):
 
 
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0)
+    print('lr: ', args.lr)
 
     # Setup data
     if args.resize_only == False: 
@@ -142,7 +147,8 @@ def main(args):
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5], inplace=True)
         ])
     else: 
-        # for model image size << data image size
+        # for model image size << data image size 
+        print('image size << data image size')
         transform = transforms.Compose([
             transforms.Resize(args.image_size),
             transforms.Lambda(lambda pil_image: center_crop_arr(pil_image, args.image_size)),
@@ -200,6 +206,8 @@ def main(args):
 
     for epoch in range(args.epochs): 
         sampler.set_epoch(epoch) 
+        running_loss = 0
+        train_steps = 0
         with tqdm(enumerate(loader), total=len(loader)) as tq:
             for data_iter_step, samples in tq: 
                 # we use a per iteration (instead of per epoch) lr scheduler
@@ -231,6 +239,8 @@ def main(args):
                     opt.zero_grad()
                 
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                
                 opt.step()
                 update_ema(ema, model.module)
 
@@ -330,7 +340,7 @@ if __name__ == "__main__":
     parser.add_argument('--accum_iter', default=1, type=int,) 
     parser.add_argument('--eval_steps', default=1000, type=int,) 
 
-    parser.add_argument('--latent_space', type=bool, default=False,) 
+    parser.add_argument('--latent_space', type=bool, default=False) 
     parser.add_argument('--vae_path', type=str, default='/TrainData/Multimodal/zhengcong.fei/dis/vae') 
     args = parser.parse_args()
     main(args)
